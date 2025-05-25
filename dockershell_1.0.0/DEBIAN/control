@@ -1,0 +1,8 @@
+Package: dockershell
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3
+Maintainer: Your Name <youremail@example.com>
+Description: Quick shell into any Docker image with smart defaults and debugging tools.

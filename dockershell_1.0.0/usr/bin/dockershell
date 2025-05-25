@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+
+# --- dockershell script copied from your latest dockershell.py ---
+import argparse
+import subprocess
+import sys
+import shlex
+import os
+
+def detect_shell(image):
+    """
+    Detect which shell is available in the image: /bin/bash or /bin/sh
+    Returns the shell path as a string.
+    """
+    for shell in ["/bin/bash", "/bin/sh"]:
+        cmd = [
+            "docker", "run", "--rm", image, "sh", "-c", f"[ -x {shell} ] && echo found || echo notfound"
+        ]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+            if output == "found":
+                return shell
+        except subprocess.CalledProcessError:
+            continue
+    return None
+
+def detect_package_manager(image):
+    """
+    Detect the available package manager in the image.
+    Returns 'apt', 'yum', 'apk', or None.
+    """
+    managers = {
+        "apt": "command -v apt-get",
+        "yum": "command -v yum",
+        "apk": "command -v apk"
+    }
+    for mgr, check_cmd in managers.items():
+        cmd = [
+            "docker", "run", "--rm", image, "sh", "-c", f"{check_cmd} >/dev/null 2>&1 && echo found || echo notfound"
+        ]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+            if output == "found":
+                return mgr
+        except subprocess.CalledProcessError:
+            continue
+    return None
+
+def build_docker_run_cmd(args, shell, install_tools_cmd=None):
+    cmd = ["docker", "run", "-it", "--rm"]
+    # Handle --mount-cwd
+    if getattr(args, 'mount_cwd', False):
+        cwd = os.getcwd()
+        cmd.extend(["-v", f"{cwd}:/workspace", "-w", "/workspace"])
+    # Handle mounts
+    if args.mount:
+        for mount_spec in args.mount:
+            cmd.extend(["-v", mount_spec])
+    # Image
+    cmd.append(args.image)
+    # Shell command
+    if install_tools_cmd:
+        # Chain install tools and shell
+        shell_cmd = f"{install_tools_cmd} && exec {shell}"
+        cmd.extend([shell, "-c", shell_cmd])
+    else:
+        cmd.append(shell)
+    return cmd
+
+def main():
+    parser = argparse.ArgumentParser(description="Quick shell into any Docker image. Stop writing complex docker run commands. Get instant interactive access to any Docker image with sensible defaults and powerful debugging tools.")
+    parser.add_argument("image", help="Docker image to shell into, e.g. ubuntu:20.04")
+    parser.add_argument("--mount", "-m", action="append", help="Volume mount (host_path:container_path)")
+    parser.add_argument("--mount-cwd", action="store_true", help="Automatically mount the current working directory to /workspace and set it as working directory inside the container")
+    parser.add_argument("--tools", "-t", help="Comma-separated list of tools to inject (e.g. curl,vim)")
+    args = parser.parse_args()
+
+    print(f"[dockershell] Using image: {args.image}")
+
+    shell = detect_shell(args.image)
+    if not shell:
+        print("[dockershell] Error: No supported shell found in image.", file=sys.stderr)
+        sys.exit(1)
+    print(f"[dockershell] Detected shell: {shell}")
+
+    install_tools_cmd = None
+    amazing_feature = False
+    tools = []
+    if args.tools:
+        tools = [t.strip() for t in args.tools.split(",") if t.strip()]
+        if "docker-shell" in tools:
+            amazing_feature = True
+            tools = [t for t in tools if t != "docker-shell"]  # Remove keyword from install list
+
+    if amazing_feature:
+        print("[docker-shell] Amazing Feature: Docker Image Info")
+        # Get image inspect info
+        try:
+            inspect_output = subprocess.check_output([
+                "docker", "image", "inspect", args.image
+            ], text=True)
+            import json
+            info = json.loads(inspect_output)[0]
+            os_type = info.get("Os", "unknown")
+            size_bytes = info.get("Size", 0)
+            size_mb = size_bytes / (1024 * 1024)
+            created = info.get("Created", "unknown")
+            print(f"  OS: {os_type}\n  Size: {size_mb:.2f} MB\n  Created: {created}")
+        except Exception as e:
+            print(f"  [docker-shell] Could not fetch image info: {e}")
+        # Get image layers count
+        try:
+            history_output = subprocess.check_output([
+                "docker", "history", "-q", args.image
+            ], text=True)
+            layers = [l for l in history_output.strip().split("\n") if l and l != "<missing>"]
+            print(f"  Layers: {len(layers)}")
+        except Exception as e:
+            print(f"  [docker-shell] Could not fetch image layers: {e}")
+
+    if tools:
+        pkg_mgr = detect_package_manager(args.image)
+        if pkg_mgr:
+            print(f"[dockershell] Detected package manager: {pkg_mgr}")
+            if pkg_mgr == "apt":
+                install_tools_cmd = f"apt-get update && apt-get install -y {' '.join(tools)}"
+            elif pkg_mgr == "yum":
+                install_tools_cmd = f"yum install -y {' '.join(tools)}"
+            elif pkg_mgr == "apk":
+                install_tools_cmd = f"apk add --no-cache {' '.join(tools)}"
+            else:
+                print("[dockershell] Warning: Unknown package manager, cannot install tools.")
+        else:
+            print("[dockershell] Warning: No supported package manager found in image. Tool injection not possible.")
+
+    docker_cmd = build_docker_run_cmd(args, shell, install_tools_cmd)
+    print(f"[dockershell] Running: {' '.join(shlex.quote(part) for part in docker_cmd)}\n")
+    try:
+        subprocess.run(docker_cmd)
+    except KeyboardInterrupt:
+        print("\n[dockershell] Exited.")
+
+if __name__ == "__main__":
+    main()
