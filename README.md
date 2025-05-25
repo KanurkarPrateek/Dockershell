@@ -49,6 +49,24 @@ Whether you’re a developer, SRE, data scientist, or just Docker-curious, docke
 
 ---
 
+## Dockershell vs. Docker: Real-World Examples
+
+| Task                       | Docker CLI Example                                                                                                                                          | Dockershell Example                                   |
+|----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| **Shell into Ubuntu**      | `docker run --rm -it ubuntu:20.04 /bin/bash`<br>(or `/bin/sh` if bash not present)                                                                          | `dockershell ubuntu:20.04`                           |
+| **Mount current directory**| `docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:20.04 /bin/bash`                                                                            | `dockershell ubuntu:20.04 --mount-cwd`               |
+| **Install curl, vim**      | `docker run --rm -it ubuntu:20.04 bash -c "apt-get update && apt-get install -y curl vim && exec bash"`                                                    | `dockershell ubuntu:20.04 --tools curl,vim`           |
+| **Show image info**        | `docker image inspect ubuntu:20.04`<br>`docker history -q ubuntu:20.04`                                                                                      | `dockershell ubuntu:20.04 --tools docker-shell`       |
+| **Persistent container**   | `docker run -it --name mydev ubuntu:20.04 /bin/bash`<br>*(then reattach with)*<br>`docker exec -it mydev /bin/bash`                                          | `dockershell ubuntu:20.04 --persistent`               |
+| **Record session**         | `docker run --rm -it ubuntu:20.04 bash -c "apt-get update && apt-get install -y script && exec script -q /session.log /bin/bash"`                         | `dockershell ubuntu:20.04 --record-session`           |
+| **Custom entrypoint**      | `docker run --rm -it --entrypoint python3 myimage:latest`                                                                                                   | `dockershell myimage:latest --entrypoint "python3"` |
+| **Profiles/Aliases**       | *(Manual scripting, no built-in support)*                                                                                                                   | `dockershell --save-profile dev_env ...`<br>`dockershell --use-profile dev_env myimage` |
+| **Dry run (show command)** | *(No built-in, must echo or script)*                                                                                                                        | `dockershell ubuntu:20.04 --dry-run`                  |
+
+**dockershell** provides a dramatically simpler, safer, and more memorable workflow for all your Docker image exploration and debugging needs.
+
+---
+
 ## Features
 
 - **Instant Shell Access:** One simple command for any image, with automatic detection of `/bin/bash` or `/bin/sh`.
