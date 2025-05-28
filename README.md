@@ -49,7 +49,7 @@ Whether you’re a developer, SRE, data scientist, or just Docker-curious, docke
 
 ---
 
-## Dockershell vs. Docker: Real-World Examples
+## Dockershell vs. Docker
 
 | Task                       | Docker CLI Example                                                                                                                                          | Dockershell Example                                   |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
