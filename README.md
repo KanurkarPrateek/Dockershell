@@ -28,6 +28,41 @@ Quick Shell into Any Docker Image
 | Dry Run Mode                  | `--dry-run`                          | Show the Docker command, don’t execute |
 | Verbose/Debug Output          | `--verbose`, `--debug`               | More detailed output for troubleshooting |
 | Version                       | `--version`                          | Print dockershell version |
+| **One-Click GitHub Shell**    | `--github <repo_url>`                | Instantly shell into any GitHub repo with a Dockerfile |
+
+---
+
+## One-Click Shell for GitHub Repos
+
+**dockershell** can instantly drop you into a shell for any GitHub repository that contains a Dockerfile. No manual cloning or building required!
+
+### How it Works
+- Clones the specified GitHub repo to a temporary directory.
+- Builds the Docker image from the repo’s Dockerfile.
+- Starts an interactive shell inside the built image, with all dockershell features available.
+- Cleans up the temp directory after your session.
+
+### Usage Example
+
+```bash
+python3 dockershell.py --github https://github.com/username/repo.git
+```
+
+- This command will:
+  1. Clone the repo
+  2. Build the Docker image
+  3. Drop you into a shell inside the built container
+
+### Comparison: Raw Docker vs. Dockershell
+
+| Task                                   | Docker CLI Example                                                                                                                                      | Dockershell Example                                 |
+|----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
+| Shell into a GitHub repo with Dockerfile| `git clone https://github.com/username/repo.git && cd repo && docker build -t myrepo . && docker run -it --rm myrepo /bin/bash`                         | `dockershell --github https://github.com/username/repo.git` |
+
+- **Dockershell**: One command, no manual cleanup, auto-detects shell, supports all other dockershell options.
+- **Docker CLI**: Multiple commands, manual cleanup, must specify shell, no tool injection or advanced features.
+
+---
 
 ---
 
