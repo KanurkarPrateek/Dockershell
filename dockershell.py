@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Show more detailed output for debugging.")
     parser.add_argument("--debug", action="store_true", help="Show debug information and full tracebacks.")
     parser.add_argument("--version", action="store_true", help="Show dockershell version and exit.")
+    parser.add_argument("--share-shell", action="store_true", help="Enable live collaborative shell sharing via SSH (experimental)")
     args = parser.parse_args()
 
     # Color output
@@ -184,6 +185,76 @@ def main():
                 print("[dockershell] Warning: Unknown package manager, cannot install tools.")
         else:
             print("[dockershell] Warning: No supported package manager found in image. Tool injection not possible.")
+
+    import random
+    import string
+    import socket
+
+    def get_random_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            return s.getsockname()[1]
+
+    if getattr(args, 'share_shell', False):
+        pkg_mgr = detect_package_manager(args.image)
+        if not pkg_mgr:
+            print("[dockershell] Error: --share-shell requires a Linux image with a supported package manager (apt, yum, apk).", file=sys.stderr)
+            sys.exit(1)
+        ssh_user = "dockershell"
+        ssh_pass = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+        ssh_port = get_random_port()
+        # Install openssh-server and set up user
+        if pkg_mgr == "apt":
+            ssh_setup = (
+                "apt-get update && apt-get install -y openssh-server && "
+                "useradd -m -s /bin/bash {user} && echo '{user}:{pwd}' | chpasswd && "
+                "mkdir -p /var/run/sshd && ".format(user=ssh_user, pwd=ssh_pass) +
+                "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && "
+                "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && "
+                "/usr/sbin/sshd && exec bash"
+            )
+        elif pkg_mgr == "yum":
+            ssh_setup = (
+                "yum install -y openssh-server passwd && "
+                "useradd -m -s /bin/bash {user} && echo '{user}:{pwd}' | chpasswd && "
+                "mkdir -p /var/run/sshd && ".format(user=ssh_user, pwd=ssh_pass) +
+                "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && "
+                "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && "
+                "/usr/sbin/sshd && exec bash"
+            )
+        elif pkg_mgr == "apk":
+            ssh_setup = (
+                "apk add --no-cache openssh && "
+                "adduser -D -s /bin/sh {user} && echo '{user}:{pwd}' | chpasswd && "
+                "mkdir -p /var/run/sshd && ".format(user=ssh_user, pwd=ssh_pass) +
+                "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && "
+                "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && "
+                "/usr/sbin/sshd && exec sh"
+            )
+        else:
+            print("[dockershell] Error: Unknown package manager for SSH setup.", file=sys.stderr)
+            sys.exit(1)
+        # Build docker run command with port mapping
+        import os
+        cmd = ["docker", "run", "-it", "--rm", "--hostname", "dockershell", "-p", f"{ssh_port}:22"]
+        if getattr(args, 'mount_cwd', False):
+            cwd = os.getcwd()
+            cmd.extend(["-v", f"{cwd}:/workspace", "-w", "/workspace"])
+        if args.mount:
+            for mount_spec in args.mount:
+                cmd.extend(["-v", mount_spec])
+        cmd.append(args.image)
+        cmd.extend(["/bin/sh", "-c", ssh_setup])
+        print(f"[dockershell] Running (with SSH sharing): {' '.join(shlex.quote(part) for part in cmd)}\n")
+        print(f"[dockershell] Share this SSH command with collaborators:")
+        print(f"  ssh {ssh_user}@localhost -p {ssh_port}")
+        print(f"  Password: {ssh_pass}")
+        print(f"[dockershell] (Press Ctrl+C to stop the session and remove the container)")
+        try:
+            subprocess.run(cmd)
+        except KeyboardInterrupt:
+            print("\n[dockershell] Exited.")
+        sys.exit(0)
 
     docker_cmd = build_docker_run_cmd(args, shell, install_tools_cmd)
     print(f"[dockershell] Running: {' '.join(shlex.quote(part) for part in docker_cmd)}\n")
