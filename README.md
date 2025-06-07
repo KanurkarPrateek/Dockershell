@@ -1,5 +1,10 @@
 # Dockershell
 
+<p align="center">
+  <img src="./Assets/GitHub Banner.png" alt="Dockershell GitHub Banner" style="max-width:100%; height:auto;">
+</p>
+
+
 Quick Shell into Any Docker Image
 =================================
 
